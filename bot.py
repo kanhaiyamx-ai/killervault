@@ -9,13 +9,14 @@ from aiogram.types import (
     CallbackQuery
 )
 from aiogram.filters import CommandStart
+from aiogram.exceptions import TelegramBadRequest
 
 # ==================================================
-# 🔒 TEMPORARY HARDCODED CONFIG (RAILWAY FIX)
+# 🔒 TEMPORARY HARDCODED CONFIG (STABLE)
 # ==================================================
 
-BOT_TOKEN = "8374406264:AAE19EeB7ZiXo71YYXFXcet2UDFZsTNaZrQ"   # <-- PUT YOUR NEW TOKEN HERE
-CHANNEL_ID = -1003636897874                  # <-- YOUR CHANNEL ID
+BOT_TOKEN = "8374406264:AAE19EeB7ZiXo71YYXFXcet2UDFZsTNaZrQ"   # ⚠️ put token here
+CHANNEL_ID = -1003636897874                  # your channel id
 SUPPORT_USERNAME = "@KILL4R_UR"
 
 # ==================================================
@@ -26,7 +27,7 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 # ==================================================
-# DATABASE (SQLite)
+# DATABASE
 # ==================================================
 
 db = sqlite3.connect("users.db")
@@ -42,7 +43,24 @@ CREATE TABLE IF NOT EXISTS users (
 db.commit()
 
 # ==================================================
-# FORCE SUBSCRIBE CHECK
+# SAFE EDIT (ERROR HANDLING)
+# ==================================================
+
+async def safe_edit(message, text, reply_markup=None):
+    try:
+        await message.edit_text(
+            text,
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+    except TelegramBadRequest as e:
+        if "message is not modified" in str(e):
+            pass
+        else:
+            raise
+
+# ==================================================
+# FORCE SUBSCRIBE
 # ==================================================
 
 async def is_subscribed(user_id: int) -> bool:
@@ -59,7 +77,7 @@ def join_keyboard():
     ])
 
 # ==================================================
-# MAIN MENU
+# KEYBOARDS
 # ==================================================
 
 def main_menu_kb():
@@ -69,6 +87,30 @@ def main_menu_kb():
         [InlineKeyboardButton(text="🔗 Invite & Earn", callback_data="invite")],
         [InlineKeyboardButton(text="🆘 Support", callback_data="support")]
     ])
+
+def back_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ Back", callback_data="back")]
+    ])
+
+# ==================================================
+# UI TEXT (UNDERGROUND STYLE)
+# ==================================================
+
+MAIN_PANEL = (
+    "🕶️ **KILL4R Private Access**\n\n"
+    "You are inside the system.\n\n"
+    "🎯 Earn points via referrals\n"
+    "🧠 Unlock private methods & tools\n"
+    "🎁 Redeem premium rewards\n\n"
+    "Proceed using the controls below."
+)
+
+REDEEM_HEADER = (
+    "🎁 **Redeem Rewards**\n\n"
+    "✨ *Use your points to unlock exclusive methods, tools, and subscriptions.*\n\n"
+    "⚡ *Points are deducted instantly after successful redemption.*"
+)
 
 # ==================================================
 # /start
@@ -85,13 +127,13 @@ async def start(message: Message):
     if not await is_subscribed(user_id):
         await message.answer(
             "🔒 **Access Restricted**\n\n"
-            "You must join the official channel to use this bot.",
+            "Join the official channel to unlock the system.",
             parse_mode="Markdown",
             reply_markup=join_keyboard()
         )
         return
 
-    # Referral system
+    # Referral
     if len(args) > 1:
         try:
             referrer = int(args[1])
@@ -105,27 +147,19 @@ async def start(message: Message):
             pass
 
     await message.answer(
-        "🏠 **Main Menu**",
+        MAIN_PANEL,
         parse_mode="Markdown",
         reply_markup=main_menu_kb()
     )
 
 # ==================================================
-# VERIFY ACCESS
+# VERIFY
 # ==================================================
 
 @dp.callback_query(F.data == "verify")
 async def verify(call: CallbackQuery):
     if await is_subscribed(call.from_user.id):
-        await call.message.edit_text(
-            "✅ **Access Verified**\n\n"
-            "✨ Access granted successfully.\n\n"
-            "🔗 Earn points by inviting users\n"
-            "🎁 Redeem premium rewards from the store\n"
-            "🔓 Unlock exclusive methods and tools",
-            parse_mode="Markdown",
-            reply_markup=main_menu_kb()
-        )
+        await safe_edit(call.message, MAIN_PANEL, main_menu_kb())
     else:
         await call.answer("Join the channel first.", show_alert=True)
 
@@ -138,11 +172,12 @@ async def profile(call: CallbackQuery):
     cur.execute("SELECT points FROM users WHERE user_id=?", (call.from_user.id,))
     points = cur.fetchone()[0]
 
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         f"👤 **Your Profile**\n\n"
-        f"⭐ Points: {points}",
-        parse_mode="Markdown",
-        reply_markup=main_menu_kb()
+        f"🆔 ID: `{call.from_user.id}`\n"
+        f"⭐ Points: **{points}**",
+        main_menu_kb()
     )
 
 # ==================================================
@@ -154,12 +189,12 @@ async def invite(call: CallbackQuery):
     bot_username = (await bot.me()).username
     link = f"https://t.me/{bot_username}?start={call.from_user.id}"
 
-    await call.message.edit_text(
-        f"🔗 **Invite & Earn**\n\n"
-        f"Earn **5 points** per referral.\n\n"
-        f"Your referral link:\n{link}",
-        parse_mode="Markdown",
-        reply_markup=main_menu_kb()
+    await safe_edit(
+        call.message,
+        "🔗 **Invite & Earn**\n\n"
+        "Earn **5 points** per valid referral.\n\n"
+        f"Your referral link:\n`{link}`",
+        main_menu_kb()
     )
 
 # ==================================================
@@ -168,25 +203,23 @@ async def invite(call: CallbackQuery):
 
 @dp.callback_query(F.data == "support")
 async def support(call: CallbackQuery):
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         f"🆘 **Support & Help**\n\n"
-        f"Contact:\n{SUPPORT_USERNAME}",
-        parse_mode="Markdown",
-        reply_markup=main_menu_kb()
+        f"For any issue, contact:\n{SUPPORT_USERNAME}",
+        main_menu_kb()
     )
 
 # ==================================================
-# REDEEM MENU
+# REDEEM
 # ==================================================
 
 @dp.callback_query(F.data == "redeem")
 async def redeem(call: CallbackQuery):
-    await call.message.edit_text(
-        "🎁 **Redeem Rewards**\n\n"
-        "✨ *Use your points to unlock exclusive methods, tools, and subscriptions.*\n\n"
-        "⚡ *Points are deducted instantly after successful redemption.*",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+    await safe_edit(
+        call.message,
+        REDEEM_HEADER,
+        InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="Insta → Gmail / Number | 20 pts", callback_data="m1")],
             [InlineKeyboardButton(text="Telegram User ID Tracker | 15 pts", callback_data="m2")],
             [InlineKeyboardButton(text="Private Methods & Tools | 30 pts", callback_data="m3")],
@@ -198,16 +231,16 @@ async def redeem(call: CallbackQuery):
         ])
     )
 
+# ==================================================
+# BACK
+# ==================================================
+
 @dp.callback_query(F.data == "back")
 async def back(call: CallbackQuery):
-    await call.message.edit_text(
-        "🏠 **Main Menu**",
-        parse_mode="Markdown",
-        reply_markup=main_menu_kb()
-    )
+    await safe_edit(call.message, MAIN_PANEL, main_menu_kb())
 
 # ==================================================
-# RUN BOT
+# RUN
 # ==================================================
 
 async def main():
