@@ -1,5 +1,4 @@
 import asyncio
-import os
 import sqlite3
 
 from aiogram import Bot, Dispatcher, F
@@ -10,28 +9,26 @@ from aiogram.types import (
     CallbackQuery
 )
 from aiogram.filters import CommandStart
-from dotenv import load_dotenv
 
-# ================= LOAD ENV =================
-load_dotenv()
+# ==================================================
+# 🔒 TEMPORARY HARDCODED CONFIG (RAILWAY FIX)
+# ==================================================
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-SUPPORT_USERNAME = os.getenv("SUPPORT_USERNAME", "@KILL4R_UR")
+BOT_TOKEN = "8374406264:AAE19EeB7ZiXo71YYXFXcet2UDFZsTNaZrQ"   # <-- PUT YOUR NEW TOKEN HERE
+CHANNEL_ID = -1003636897874                  # <-- YOUR CHANNEL ID
+SUPPORT_USERNAME = "@KILL4R_UR"
 
-# Fallback-safe CHANNEL_ID (prevents Railway crash)
-CHANNEL_ID = os.getenv("CHANNEL_ID")
-if not CHANNEL_ID:
-    CHANNEL_ID = -1003636897874  # <-- YOUR CHANNEL ID
-CHANNEL_ID = int(CHANNEL_ID)
+# ==================================================
+# BOT SETUP
+# ==================================================
 
-if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN is missing")
-
-# ================= BOT SETUP =================
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ================= DATABASE =================
+# ==================================================
+# DATABASE (SQLite)
+# ==================================================
+
 db = sqlite3.connect("users.db")
 cur = db.cursor()
 
@@ -44,7 +41,10 @@ CREATE TABLE IF NOT EXISTS users (
 """)
 db.commit()
 
-# ================= FORCE SUBSCRIBE =================
+# ==================================================
+# FORCE SUBSCRIBE CHECK
+# ==================================================
+
 async def is_subscribed(user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(CHANNEL_ID, user_id)
@@ -58,7 +58,10 @@ def join_keyboard():
         [InlineKeyboardButton(text="✅ Verify Access", callback_data="verify")]
     ])
 
-# ================= MAIN MENU =================
+# ==================================================
+# MAIN MENU
+# ==================================================
+
 def main_menu_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👤 Profile", callback_data="profile")],
@@ -67,7 +70,10 @@ def main_menu_kb():
         [InlineKeyboardButton(text="🆘 Support", callback_data="support")]
     ])
 
-# ================= START =================
+# ==================================================
+# /start
+# ==================================================
+
 @dp.message(CommandStart())
 async def start(message: Message):
     user_id = message.from_user.id
@@ -85,19 +91,29 @@ async def start(message: Message):
         )
         return
 
-    # Referral handling
+    # Referral system
     if len(args) > 1:
-        referrer = int(args[1])
-        if referrer != user_id:
-            cur.execute("SELECT referrer FROM users WHERE user_id=?", (user_id,))
-            if cur.fetchone()[0] is None:
-                cur.execute("UPDATE users SET referrer=? WHERE user_id=?", (referrer, user_id))
-                cur.execute("UPDATE users SET points = points + 5 WHERE user_id=?", (referrer,))
-                db.commit()
+        try:
+            referrer = int(args[1])
+            if referrer != user_id:
+                cur.execute("SELECT referrer FROM users WHERE user_id=?", (user_id,))
+                if cur.fetchone()[0] is None:
+                    cur.execute("UPDATE users SET referrer=? WHERE user_id=?", (referrer, user_id))
+                    cur.execute("UPDATE users SET points = points + 5 WHERE user_id=?", (referrer,))
+                    db.commit()
+        except:
+            pass
 
-    await message.answer("🏠 **Main Menu**", reply_markup=main_menu_kb(), parse_mode="Markdown")
+    await message.answer(
+        "🏠 **Main Menu**",
+        parse_mode="Markdown",
+        reply_markup=main_menu_kb()
+    )
 
-# ================= VERIFY =================
+# ==================================================
+# VERIFY ACCESS
+# ==================================================
+
 @dp.callback_query(F.data == "verify")
 async def verify(call: CallbackQuery):
     if await is_subscribed(call.from_user.id):
@@ -113,40 +129,56 @@ async def verify(call: CallbackQuery):
     else:
         await call.answer("Join the channel first.", show_alert=True)
 
-# ================= PROFILE =================
+# ==================================================
+# PROFILE
+# ==================================================
+
 @dp.callback_query(F.data == "profile")
 async def profile(call: CallbackQuery):
     cur.execute("SELECT points FROM users WHERE user_id=?", (call.from_user.id,))
     points = cur.fetchone()[0]
+
     await call.message.edit_text(
-        f"👤 **Your Profile**\n\n⭐ Points: {points}",
+        f"👤 **Your Profile**\n\n"
+        f"⭐ Points: {points}",
         parse_mode="Markdown",
         reply_markup=main_menu_kb()
     )
 
-# ================= INVITE =================
+# ==================================================
+# INVITE
+# ==================================================
+
 @dp.callback_query(F.data == "invite")
 async def invite(call: CallbackQuery):
     bot_username = (await bot.me()).username
     link = f"https://t.me/{bot_username}?start={call.from_user.id}"
+
     await call.message.edit_text(
         f"🔗 **Invite & Earn**\n\n"
         f"Earn **5 points** per referral.\n\n"
-        f"Your link:\n{link}",
+        f"Your referral link:\n{link}",
         parse_mode="Markdown",
         reply_markup=main_menu_kb()
     )
 
-# ================= SUPPORT =================
+# ==================================================
+# SUPPORT
+# ==================================================
+
 @dp.callback_query(F.data == "support")
 async def support(call: CallbackQuery):
     await call.message.edit_text(
-        f"🆘 **Support & Help**\n\nContact:\n{SUPPORT_USERNAME}",
+        f"🆘 **Support & Help**\n\n"
+        f"Contact:\n{SUPPORT_USERNAME}",
         parse_mode="Markdown",
         reply_markup=main_menu_kb()
     )
 
-# ================= REDEEM =================
+# ==================================================
+# REDEEM MENU
+# ==================================================
+
 @dp.callback_query(F.data == "redeem")
 async def redeem(call: CallbackQuery):
     await call.message.edit_text(
@@ -168,9 +200,16 @@ async def redeem(call: CallbackQuery):
 
 @dp.callback_query(F.data == "back")
 async def back(call: CallbackQuery):
-    await call.message.edit_text("🏠 **Main Menu**", reply_markup=main_menu_kb(), parse_mode="Markdown")
+    await call.message.edit_text(
+        "🏠 **Main Menu**",
+        parse_mode="Markdown",
+        reply_markup=main_menu_kb()
+    )
 
-# ================= RUN =================
+# ==================================================
+# RUN BOT
+# ==================================================
+
 async def main():
     print("Bot started")
     await dp.start_polling(bot)
